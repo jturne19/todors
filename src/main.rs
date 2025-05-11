@@ -36,7 +36,10 @@ impl TodoStruct {
     }
 }
 
-fn save_todos_to_file(todo_list: &Vec<TodoStruct>, filename: &str, filename_done: &str) -> std::io::Result<()> {
+static TODOS_FILENAME: &str = "todos.md";
+static DONES_FILENAME: &str = "done_todos.md";
+
+fn save_todos_to_file(todo_list: &Vec<TodoStruct>, done_list: &Vec<TodoStruct>, filename: &str, filename_done: &str) -> std::io::Result<()> {
     let mut file = fs::File::create(filename)?;
     let header = "# TODOs\n";
     file.write(header.as_bytes())?;
@@ -46,19 +49,18 @@ fn save_todos_to_file(todo_list: &Vec<TodoStruct>, filename: &str, filename_done
     file2.write(header2.as_bytes())?;
 
     for todo in todo_list {
-        if todo.completed {
-            let line = format!(
-                "- DONE (Completed {}, Added {}) {}\n",
-                todo.date_completed, todo.date_added, todo.text
-            );
-            file2.write(line.as_bytes())?;
-        } else {
-            let line = format!(
-                "- ({}) {}\n",
-                todo.date_added, todo.text
-            );
-            file.write_all(line.as_bytes())?;
-        }
+        let line = format!(
+            "- ({}) {}\n",
+            todo.date_added, todo.text
+        );
+        file.write_all(line.as_bytes())?;
+    }
+    for done in done_list {
+        let line = format!(
+            "- DONE (Completed {}, Added {}) {}\n",
+            done.date_completed, done.date_added, done.text
+        );
+        file2.write(line.as_bytes())?;
     }
     Ok(())
 }
@@ -100,7 +102,7 @@ fn load_todos_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
                 }
             }
         }
-        
+
     }
     Ok(todos)
 }
@@ -117,12 +119,12 @@ fn load_dones_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
     for line_result in reader.lines() {
         let line = line_result?;
         let trimmed_line = line.trim();
-        
+
         if trimmed_line == "# Done TODOs" {
             reading_dones = true;
             continue;
         }
-        
+
         if reading_dones && trimmed_line.starts_with("- DONE (Completed ") && trimmed_line.contains(", Added ") {
             // "- DONE (Completed 2025-05-10, Added 2025-05-09) my task to do something"
             let parts: Vec<&str> = trimmed_line.splitn(2, ") ").collect();
@@ -174,7 +176,7 @@ fn main() -> eframe::Result {
 
     // Load TODOs from file
     {
-        match load_todos_from_file("todos.md") {
+        match load_todos_from_file(TODOS_FILENAME) {
             Ok(loaded_todos) => {
                 *todo_list_clone.borrow_mut() = loaded_todos;
             }
@@ -183,7 +185,7 @@ fn main() -> eframe::Result {
     }
     // Load dones from file
     {
-        match load_dones_from_file("done_todos.md") {
+        match load_dones_from_file(DONES_FILENAME) {
             Ok(loaded_dones) => {
                 *done_list_clone.borrow_mut() = loaded_dones;
             }
@@ -193,7 +195,7 @@ fn main() -> eframe::Result {
 
     eframe::run_simple_native("todors", options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
-            let box_output = egui::TextEdit::singleline(&mut new_todo_text)
+            let _box_output = egui::TextEdit::singleline(&mut new_todo_text)
                 .hint_text("Add new TODO here")
                 .show(ui);
             if ui.button("Add TODO").clicked() {
@@ -205,11 +207,11 @@ fn main() -> eframe::Result {
 
                 // save to file
                 let current_todo_list = todo_list_clone.borrow();
-                match save_todos_to_file(&current_todo_list, "todos.md", "done_todos.md") {
+                let current_done_list = done_list_clone.borrow();
+                match save_todos_to_file(&current_todo_list, &current_done_list, TODOS_FILENAME, DONES_FILENAME) {
                     Ok(_) => (),
                     Err(e) => eprintln!("Error saving todo list: {}", e)
                 }
-
             }
             ui.separator();
             ui.label("Current TODOs:");
@@ -224,8 +226,13 @@ fn main() -> eframe::Result {
                             let todo_list = todo_list_clone.borrow();
                             todo_list.clone()
                         };
+                        // let done_list_data = {
+                        //     let done_list = done_list_clone.borrow();
+                        //     done_list.clone()
+                        // };
 
                         let mut todo_list_mut = todo_list_clone.borrow_mut();
+                        let mut done_list_mut = done_list_clone.borrow_mut();
 
                         for (row_index, mut todo_item) in todo_list_data.into_iter().enumerate() {
                             body.row(20.0, |mut row| {
@@ -233,11 +240,18 @@ fn main() -> eframe::Result {
                                     let mut checked = todo_item.completed;
                                     if ui.checkbox(&mut checked, "").changed() {
                                         if checked {
-                                            todo_item.completed();
+                                            // Move it to the done list
+                                            let mut moved_item = todo_list_mut.remove(row_index);
+                                            moved_item.completed = true;
+                                            done_list_mut.insert(0, moved_item);
                                         } else{
                                             todo_item.not_completed();
                                         }
-                                        todo_list_mut[row_index] = todo_item.clone();
+                                        // save the lists on change
+                                        match save_todos_to_file(&todo_list_mut, &done_list_mut, TODOS_FILENAME, DONES_FILENAME) {
+                                            Ok(_) => (),
+                                            Err(e) => eprintln!("Error saving todo list: {}", e)
+                                        }
                                     }
                                 });
                                 row.col(|ui| {
