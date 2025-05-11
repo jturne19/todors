@@ -226,10 +226,6 @@ fn main() -> eframe::Result {
                             let todo_list = todo_list_clone.borrow();
                             todo_list.clone()
                         };
-                        // let done_list_data = {
-                        //     let done_list = done_list_clone.borrow();
-                        //     done_list.clone()
-                        // };
 
                         let mut todo_list_mut = todo_list_clone.borrow_mut();
                         let mut done_list_mut = done_list_clone.borrow_mut();
@@ -276,16 +272,25 @@ fn main() -> eframe::Result {
                             };
 
                             let mut done_list_mut = done_list_clone.borrow_mut();
+                            let mut todo_list_mut = todo_list_clone.borrow_mut();
 
                             for (row_index, mut done_item) in done_list_data.into_iter().enumerate() {
                                 body.row(20.0, |mut row| {
                                     row.col(|ui| {
                                         let mut checked = done_item.completed;
                                         if ui.checkbox(&mut checked, "").changed() {
-                                            if checked {
+                                            if !checked {
+                                                // gotta move it back to the todo list
+                                                let mut moved_item = done_list_mut.remove(row_index);
+                                                moved_item.not_completed();
+                                                todo_list_mut.insert(0, moved_item);
+                                                // save the lists on change
+                                                match save_todos_to_file(&todo_list_mut, &done_list_mut, TODOS_FILENAME, DONES_FILENAME) {
+                                                    Ok(_) => (),
+                                                    Err(e) => eprintln!("Error saving todo list: {}", e)
+                                                }
+                                            } else {
                                                 done_item.completed();
-                                            } else{
-                                                done_item.not_completed();
                                             }
                                             // need to have it update the todo list when unchecked
                                             // done_list_mut[row_index] = done_item.clone();
