@@ -6,9 +6,42 @@ use egui_extras::{TableBuilder, Column};
 use chrono::prelude::*;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::cell::RefCell;
+use dirs::home_dir;
 
+// set static variables for the markdown file names
+static TODOS_FILENAME: &str = "todos.md";
+static DONES_FILENAME: &str = "done_todos.md";
+
+// get the path where the Markdowns are saved/loaded
+// on linux: $HOME/.todors
+// on macos: $HOME/.todors
+// on windows: {FOLDERID_Profile}\.todors
+pub fn get_todo_data_dir() -> Option<PathBuf> {
+    home_dir().map(|mut path| {
+        path.push(".todors");
+        if !path.exists() {
+            std::fs::create_dir_all(&path).unwrap();
+        }
+        path
+    })
+}
+// get the path for the todo markdown file
+pub fn get_todo_path() -> Option<PathBuf> {
+    get_todo_data_dir().map(|mut path| {
+        path.push(TODOS_FILENAME);
+        path
+    })
+}
+// get the path for the done markdown file
+pub fn get_done_path() -> Option<PathBuf> {
+    get_todo_data_dir().map(|mut path| {
+        path.push(DONES_FILENAME);
+        path
+    })
+}
 // create public struct for a TODO item
 #[derive(Clone, Default)]
 pub struct TodoStruct {
@@ -39,17 +72,14 @@ impl TodoStruct {
         self.date_completed.clear();
     }
 }
-// set static variables for the markdown file names
-static TODOS_FILENAME: &str = "todos.md";
-static DONES_FILENAME: &str = "done_todos.md";
 
 // Save the todo and done lists to their Markdown files
-fn save_todos_to_file(todo_list: &Vec<TodoStruct>, done_list: &Vec<TodoStruct>, filename: &str, filename_done: &str) -> std::io::Result<()> {
-    let mut file = fs::File::create(filename)?;
+fn save_todos_to_file(todo_list: &Vec<TodoStruct>, done_list: &Vec<TodoStruct>) -> std::io::Result<()> {
+    let mut file = fs::File::create(get_todo_path().unwrap())?;
     let header = "# TODOs\n";
     file.write(header.as_bytes())?;
 
-    let mut file2 = fs::File::create(filename_done)?;
+    let mut file2 = fs::File::create(get_done_path().unwrap())?;
     let header2 = "# DONEs\n";
     file2.write(header2.as_bytes())?;
 
@@ -74,8 +104,8 @@ fn save_todos_to_file(todo_list: &Vec<TodoStruct>, done_list: &Vec<TodoStruct>, 
 // expects "# TODOs" in the file to know it has TODOs to read in
 // expect each todo line in the file to look like "- (<DATE>) My TODO text here"
 // E.g, "- (2025-05-11) Need to do something important"
-fn load_todos_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
-    let file = match fs::File::open(filename) {
+fn load_todos_from_file() -> std::io::Result<Vec<TodoStruct>> {
+    let file = match fs::File::open(get_todo_path().unwrap()) {
         Ok(file) => file,
         Err(_) => return Ok(Vec::new()),
     };
@@ -120,8 +150,8 @@ fn load_todos_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
 // expects "# DONEs" in the file to know it has TODOs to read in
 // expect each todo line in the file to look like "- DONE (Completed <DATE>, Added <DATE>) My TODO text here"
 // E.g, "- DONE (Completed 2025-05-11, Added 2025-05-10) pee pee poo poo"
-fn load_dones_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
-    let file = match fs::File::open(filename) {
+fn load_dones_from_file() -> std::io::Result<Vec<TodoStruct>> {
+    let file = match fs::File::open(get_done_path().unwrap()) {
         Ok(file) => file,
         Err(_) => return Ok(Vec::new()),
     };
@@ -193,7 +223,7 @@ fn main() -> eframe::Result {
 
     // Load TODOs from file
     {
-        match load_todos_from_file(TODOS_FILENAME) {
+        match load_todos_from_file() {
             Ok(loaded_todos) => {
                 *todo_list_clone.borrow_mut() = loaded_todos;
             }
@@ -202,7 +232,7 @@ fn main() -> eframe::Result {
     }
     // Load DONEs from file
     {
-        match load_dones_from_file(DONES_FILENAME) {
+        match load_dones_from_file() {
             Ok(loaded_dones) => {
                 *done_list_clone.borrow_mut() = loaded_dones;
             }
@@ -226,7 +256,7 @@ fn main() -> eframe::Result {
                 // save both lists to file
                 let current_todo_list = todo_list_clone.borrow();
                 let current_done_list = done_list_clone.borrow();
-                match save_todos_to_file(&current_todo_list, &current_done_list, TODOS_FILENAME, DONES_FILENAME) {
+                match save_todos_to_file(&current_todo_list, &current_done_list) {
                     Ok(_) => (),
                     Err(e) => eprintln!("Error saving todo list: {}", e)
                 }
@@ -266,7 +296,7 @@ fn main() -> eframe::Result {
                                             todo_item.not_completed();
                                         }
                                         // save the lists on change
-                                        match save_todos_to_file(&todo_list_mut, &done_list_mut, TODOS_FILENAME, DONES_FILENAME) {
+                                        match save_todos_to_file(&todo_list_mut, &done_list_mut) {
                                             Ok(_) => (),
                                             Err(e) => eprintln!("Error saving todo list: {}", e)
                                         }
@@ -310,7 +340,7 @@ fn main() -> eframe::Result {
                                                 moved_item.not_completed();
                                                 todo_list_mut.insert(0, moved_item);
                                                 // save the lists on change
-                                                match save_todos_to_file(&todo_list_mut, &done_list_mut, TODOS_FILENAME, DONES_FILENAME) {
+                                                match save_todos_to_file(&todo_list_mut, &done_list_mut) {
                                                     Ok(_) => (),
                                                     Err(e) => eprintln!("Error saving todo list: {}", e)
                                                 }
