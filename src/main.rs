@@ -9,6 +9,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::rc::Rc;
 use std::cell::RefCell;
 
+// create public struct for a TODO item
 #[derive(Clone, Default)]
 pub struct TodoStruct {
     text: String,
@@ -18,6 +19,7 @@ pub struct TodoStruct {
 }
 
 impl TodoStruct {
+    // implement a clear function to reset a TODO item
     pub fn clear(&mut self) {
         self.text.clear();
         self.date_added.clear();
@@ -25,27 +27,30 @@ impl TodoStruct {
         self.date_completed.clear();
     }
 
+    // marks an item as completed and adds the current Date
     pub fn completed(&mut self) {
         self.completed = true;
         self.date_completed = Utc::now().date_naive().to_string();
     }
 
+    // marks an item as not completed and clears out the date_completed field
     pub fn not_completed(&mut self) {
         self.completed = false;
         self.date_completed.clear();
     }
 }
-
+// set static variables for the markdown file names
 static TODOS_FILENAME: &str = "todos.md";
 static DONES_FILENAME: &str = "done_todos.md";
 
+// Save the todo and done lists to their Markdown files
 fn save_todos_to_file(todo_list: &Vec<TodoStruct>, done_list: &Vec<TodoStruct>, filename: &str, filename_done: &str) -> std::io::Result<()> {
     let mut file = fs::File::create(filename)?;
     let header = "# TODOs\n";
     file.write(header.as_bytes())?;
 
     let mut file2 = fs::File::create(filename_done)?;
-    let header2 = "# Done TODOs\n";
+    let header2 = "# DONEs\n";
     file2.write(header2.as_bytes())?;
 
     for todo in todo_list {
@@ -65,6 +70,10 @@ fn save_todos_to_file(todo_list: &Vec<TodoStruct>, done_list: &Vec<TodoStruct>, 
     Ok(())
 }
 
+// load the TODOs from the todo Markdown file
+// expects "# TODOs" in the file to know it has TODOs to read in
+// expect each todo line in the file to look like "- (<DATE>) My TODO text here"
+// E.g, "- (2025-05-11) Need to do something important"
 fn load_todos_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
     let file = match fs::File::open(filename) {
         Ok(file) => file,
@@ -107,6 +116,10 @@ fn load_todos_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
     Ok(todos)
 }
 
+// load the DONEs from the done Markdown file
+// expects "# DONEs" in the file to know it has TODOs to read in
+// expect each todo line in the file to look like "- DONE (Completed <DATE>, Added <DATE>) My TODO text here"
+// E.g, "- DONE (Completed 2025-05-11, Added 2025-05-10) pee pee poo poo"
 fn load_dones_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
     let file = match fs::File::open(filename) {
         Ok(file) => file,
@@ -120,7 +133,7 @@ fn load_dones_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
         let line = line_result?;
         let trimmed_line = line.trim();
 
-        if trimmed_line == "# Done TODOs" {
+        if trimmed_line == "# DONEs" {
             reading_dones = true;
             continue;
         }
@@ -162,16 +175,20 @@ fn load_dones_from_file(filename: &str) -> std::io::Result<Vec<TodoStruct>> {
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
+    // set the default window size
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
     };
 
+    // initialize string for the user-input todo text
     let mut new_todo_text = String::new();
+    // the RefCell stuff allows for mutable shared ownership of the todo_list and done_list
     let todo_list = Rc::new(RefCell::new(Vec::<TodoStruct>::new()));
     let todo_list_clone = todo_list.clone();
     let done_list = Rc::new(RefCell::new(Vec::<TodoStruct>::new()));
     let done_list_clone = done_list.clone();
+    // initialize an empty TodoStruct item which will be filled in with the user-nput
     let mut new_todo = TodoStruct {text: "".to_string(), date_added: "".to_string(), completed: false, date_completed: "NA".to_string()};
 
     // Load TODOs from file
@@ -183,7 +200,7 @@ fn main() -> eframe::Result {
             Err(e) => eprintln!("Error loading todos: {}; skipping", e)
         }
     }
-    // Load dones from file
+    // Load DONEs from file
     {
         match load_dones_from_file(DONES_FILENAME) {
             Ok(loaded_dones) => {
@@ -193,6 +210,7 @@ fn main() -> eframe::Result {
         }
     }
 
+    // Run the egui app
     eframe::run_simple_native("todors", options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
             let _box_output = egui::TextEdit::singleline(&mut new_todo_text)
@@ -205,7 +223,7 @@ fn main() -> eframe::Result {
                 new_todo.clear();
                 new_todo_text.clear();
 
-                // save to file
+                // save both lists to file
                 let current_todo_list = todo_list_clone.borrow();
                 let current_done_list = done_list_clone.borrow();
                 match save_todos_to_file(&current_todo_list, &current_done_list, TODOS_FILENAME, DONES_FILENAME) {
@@ -215,32 +233,36 @@ fn main() -> eframe::Result {
             }
             ui.separator();
             ui.label("Current TODOs:");
+            // create a scrollable area for displaying the current TODOs
             egui::ScrollArea::vertical().show(ui, |ui| {
-
+                // create a Table for displaying the current TODOs
                 TableBuilder::new(ui)
                     .striped(true)
-                    .column(Column::auto())
-                    .column(Column::remainder())
+                    .column(Column::auto())// column for the checkbox
+                    .column(Column::remainder()) // column for the todo text
                     .body(|mut body| {
                         let todo_list_data = {
                             let todo_list = todo_list_clone.borrow();
                             todo_list.clone()
                         };
 
+                        // borrow mutable todo list and done list
                         let mut todo_list_mut = todo_list_clone.borrow_mut();
                         let mut done_list_mut = done_list_clone.borrow_mut();
-
+                        // loop through all the todos in the todo list to show them in the table
                         for (row_index, mut todo_item) in todo_list_data.into_iter().enumerate() {
                             body.row(20.0, |mut row| {
+                                // first column is the checkbox for if the item is completed or not
                                 row.col(|ui| {
                                     let mut checked = todo_item.completed;
                                     if ui.checkbox(&mut checked, "").changed() {
                                         if checked {
-                                            // Move it to the done list
+                                            // move it to the done list
                                             let mut moved_item = todo_list_mut.remove(row_index);
-                                            moved_item.completed = true;
+                                            moved_item.completed();
                                             done_list_mut.insert(0, moved_item);
                                         } else{
+                                            // otherwise leave it as not completed. probably not strictly necessary
                                             todo_item.not_completed();
                                         }
                                         // save the lists on change
@@ -250,6 +272,7 @@ fn main() -> eframe::Result {
                                         }
                                     }
                                 });
+                                // second column is the todo text simply printed out
                                 row.col(|ui| {
                                     ui.label(format!("{}", todo_item.text));
                                 });
@@ -258,9 +281,11 @@ fn main() -> eframe::Result {
                     });
             });
             ui.separator();
-            ui.collapsing("Completed TODOs", |ui| {
+            // create a collapsing dialog for the DONEs
+            ui.collapsing("DONEs", |ui| {
+                // create a scrollable area for displaying the DONEs 
                 egui::ScrollArea::vertical().show(ui, |ui| {
-
+                    // create a table for the DONEs similar to the TODOs
                     TableBuilder::new(ui)
                         .striped(true)
                         .column(Column::auto())
@@ -292,8 +317,6 @@ fn main() -> eframe::Result {
                                             } else {
                                                 done_item.completed();
                                             }
-                                            // need to have it update the todo list when unchecked
-                                            // done_list_mut[row_index] = done_item.clone();
                                         }
                                     });
                                     row.col(|ui| {
