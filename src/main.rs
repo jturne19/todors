@@ -213,10 +213,10 @@ fn main() -> eframe::Result {
     // Run the egui app
     eframe::run_simple_native("todors", options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
-            let _box_output = egui::TextEdit::singleline(&mut new_todo_text)
-                .hint_text("Add new TODO here")
-                .show(ui);
-            if ui.button("Add TODO").clicked() {
+            let response = ui.add(egui::TextEdit::singleline(&mut new_todo_text).hint_text("Add new TODO here"));
+            let button_response = ui.button("Add TODO").clicked();
+            // if user presses enter or if the button is pressed, then add the new TODO
+            if (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) || button_response {
                 new_todo.text = new_todo_text.trim().to_string();
                 new_todo.date_added = Utc::now().date_naive().to_string();
                 todo_list_clone.borrow_mut().insert(0, new_todo.clone());
@@ -283,7 +283,7 @@ fn main() -> eframe::Result {
             ui.separator();
             // create a collapsing dialog for the DONEs
             ui.collapsing("DONEs", |ui| {
-                // create a scrollable area for displaying the DONEs 
+                // create a scrollable area for displaying the DONEs
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     // create a table for the DONEs similar to the TODOs
                     TableBuilder::new(ui)

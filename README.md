@@ -12,6 +12,5 @@ I didn't like any of the TODO/task apps I could found. They were either TUI or w
 
 ## TODOs
 
-- Press enter to add a new todo instead of only relying on the "Add TODO" button
 - Allow user-setting of the markdown files
 - Allow user-customizable gui looks
